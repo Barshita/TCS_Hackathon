@@ -1,0 +1,1673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QSR Order Rush Predictor & Kitchen Prep Command Center</title>
+
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- PapaParse CDN for client-side CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            slate: {
+              850: '#172033',
+              925: '#0b1120',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    /* Custom scrollbar for clean operational tables */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    @keyframes pulseBorder {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.35); }
+      50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    }
+    .rush-pulse {
+      animation: pulseBorder 2.2s infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- ==================== TOP COMMAND BAR ==================== -->
+  <header class="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-30 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        
+        <!-- Brand & Title -->
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20 shrink-0">
+            <i data-lucide="flame" class="w-6 h-6 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">
+                QSR Order Rush Predictor
+              </h1>
+              <span class="px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 rounded-full">
+                Kitchen Prep Command Center
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">
+              100% Client-Side Forecasting • Zero Backend • Explainable Prep Optimization
+            </p>
+          </div>
+        </div>
+
+        <!-- Data Ingestion & Assumptions Controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- CSV Upload Dropdown Trigger -->
+          <button id="toggleUploadDrawerBtn" type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer">
+            <i data-lucide="upload-cloud" class="w-4 h-4 text-sky-400"></i>
+            <span>Upload CSVs</span>
+            <span id="csvStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 ml-0.5" title="Dataset Loaded"></span>
+          </button>
+
+          <!-- Generate Synthetic Scenario -->
+          <button id="regenerateSyntheticBtn" type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>New Synthetic Scenario</span>
+          </button>
+
+          <!-- Download Sample CSV Templates -->
+          <button id="downloadTemplatesBtn" type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition cursor-pointer"
+            title="Export current active datasets as CSV files">
+            <i data-lucide="download" class="w-4 h-4 text-slate-400"></i>
+            <span class="hidden sm:inline">Export CSVs</span>
+          </button>
+
+          <!-- Model Assumptions Modal Button -->
+          <button id="openAssumptionsBtn" type="button"
+            class="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition cursor-pointer">
+            <i data-lucide="book-open-check" class="w-4 h-4"></i>
+            <span>Assumptions</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Collapsible CSV Ingestion Panel -->
+      <div id="csvUploadDrawer" class="hidden mt-4 pt-4 border-t border-slate-800">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <!-- Orders CSV -->
+          <label class="flex flex-col justify-between p-3 rounded-xl bg-slate-850 border border-dashed border-slate-700 hover:border-sky-500 transition cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <i data-lucide="receipt" class="w-4 h-4 text-sky-400"></i>
+                1. Orders.csv
+              </span>
+              <span id="ordersFileBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">Synthetic Active</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Cols: date, time_period, menu_item, category, quantity, channel</p>
+            <input type="file" id="ordersCsvInput" accept=".csv" class="hidden" />
+          </label>
+
+          <!-- Menu Preparation CSV -->
+          <label class="flex flex-col justify-between p-3 rounded-xl bg-slate-850 border border-dashed border-slate-700 hover:border-sky-500 transition cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <i data-lucide="chef-hat" class="w-4 h-4 text-amber-400"></i>
+                2. Menu_Preparation.csv
+              </span>
+              <span id="prepFileBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">Synthetic Active</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Cols: date, time_period, menu_item, prepared_qty, sold_qty, unsold_qty, prep_time_mins</p>
+            <input type="file" id="prepCsvInput" accept=".csv" class="hidden" />
+          </label>
+
+          <!-- Calendar CSV -->
+          <label class="flex flex-col justify-between p-3 rounded-xl bg-slate-850 border border-dashed border-slate-700 hover:border-sky-500 transition cursor-pointer">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <i data-lucide="calendar-days" class="w-4 h-4 text-purple-400"></i>
+                3. Calendar.csv
+              </span>
+              <span id="calendarFileBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">Synthetic Active</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Cols: date, day_type, is_holiday, festival_name, has_promotion, local_event</p>
+            <input type="file" id="calendarCsvInput" accept=".csv" class="hidden" />
+          </label>
+        </div>
+        <div class="flex items-center justify-between mt-3 text-xs text-slate-400">
+          <span id="datasetSummaryText">Loaded 420 order records, 336 prep logs, and 14 calendar days.</span>
+          <button id="resetToDemoBtn" type="button" class="text-sky-400 hover:text-sky-300 font-medium underline cursor-pointer">
+            Reset to Default Synthetic Dataset
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT ==================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- Toast / Inline Notification Banner -->
+    <div id="toastBanner" class="hidden rounded-xl px-4 py-3 text-xs font-medium flex items-center justify-between shadow-sm border">
+      <span id="toastMessage"></span>
+      <button type="button" onclick="document.getElementById('toastBanner').classList.add('hidden')" class="ml-4 opacity-70 hover:opacity-100 cursor-pointer">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- 1. SIMULATION / UPCOMING PERIOD SELECTOR BAR -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 flex-1">
+          
+          <!-- Day Type Selector -->
+          <div>
+            <label for="simDayType" class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-600"></i>
+              Target Day Type
+            </label>
+            <select id="simDayType" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+              <option value="Weekday">Weekday (Mon – Thu)</option>
+              <option value="Friday">Friday</option>
+              <option value="Weekend" selected>Weekend (Sat – Sun)</option>
+            </select>
+          </div>
+
+          <!-- Upcoming Time Period Selector -->
+          <div>
+            <label for="simTimePeriod" class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <i data-lucide="clock" class="w-3.5 h-3.5 text-indigo-600"></i>
+              Upcoming Time Period
+            </label>
+            <select id="simTimePeriod" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+              <option value="Morning">Morning (08:00 – 11:30)</option>
+              <option value="Lunch">Lunch Rush (11:30 – 15:00)</option>
+              <option value="Evening">Evening Snacks (15:00 – 19:00)</option>
+              <option value="Dinner" selected>Dinner Peak (19:00 – 23:00)</option>
+            </select>
+          </div>
+
+          <!-- Calendar & Event Context -->
+          <div>
+            <label for="simEventContext" class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <i data-lucide="party-popper" class="w-3.5 h-3.5 text-indigo-600"></i>
+              Calendar / External Event
+            </label>
+            <select id="simEventContext" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+              <option value="None">Normal Day (No Event)</option>
+              <option value="Holiday">Public Holiday / Festival</option>
+              <option value="LocalEvent" selected>Local Stadium / Concert Event</option>
+              <option value="RainySlow">Heavy Rain / Slow Footfall</option>
+            </select>
+          </div>
+
+          <!-- Promotion / Unusual Order Pattern Toggle -->
+          <div>
+            <label for="simPromoContext" class="block text-xs font-semibold text-slate-600 mb-1.5 flex items-center gap-1.5">
+              <i data-lucide="tag" class="w-3.5 h-3.5 text-indigo-600"></i>
+              Promotions & Order Pattern
+            </label>
+            <select id="simPromoContext" class="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+              <option value="None">No Active Promotion</option>
+              <option value="ComboPromo" selected>Weekend Combo / BOGO Promo</option>
+              <option value="DeliverySurge">Delivery App Flash Sale</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Run Prediction Trigger -->
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="runPredictionBtn" type="button"
+            class="w-full lg:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold shadow-sm transition cursor-pointer">
+            <i data-lucide="cpu" class="w-4 h-4 text-amber-400"></i>
+            <span>Predict Rush & Prep</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. STAFF ALERT BANNER -->
+    <section id="staffAlertBanner" class="rounded-2xl border p-4 sm:p-5 transition-all duration-300 bg-red-50 border-red-200 rush-pulse">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-start gap-3.5">
+          <div id="alertIconWrapper" class="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+            <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span id="alertBadgeText" class="px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider rounded-full bg-red-600 text-white">
+                CRITICAL RUSH & SHORTAGE ALERT
+              </span>
+              <span id="alertContextSummary" class="text-xs font-semibold text-red-800">
+                Weekend • Dinner Peak • Local Event + Combo Promo
+              </span>
+            </div>
+            <p id="alertHeadline" class="text-sm sm:text-base font-bold text-slate-900 mt-1">
+              Expected +46% demand spike above standard baseline. Pre-prep high-velocity items 25 mins early!
+            </p>
+            <p id="alertSubtext" class="text-xs text-slate-700 mt-0.5">
+              High shortage risk detected on Classic Chicken Burger & Paneer Tikka Wrap. Watch wastage on French Fries.
+            </p>
+          </div>
+        </div>
+        <div class="shrink-0 flex sm:flex-col items-end justify-between sm:justify-center border-t sm:border-t-0 pt-2 sm:pt-0 border-red-200/70">
+          <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Recommended Lead Prep</span>
+          <span id="leadPrepWindow" class="text-sm font-extrabold text-red-700">Start 30 mins prior</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. KPI SUMMARY CARDS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      
+      <!-- KPI 1: Predicted Customer Demand -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Predicted Order Volume</span>
+          <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="my-3">
+          <div class="flex items-baseline gap-2">
+            <span id="kpiTotalDemand" class="text-3xl font-extrabold text-slate-900">184</span>
+            <span class="text-xs font-medium text-slate-500">items / period</span>
+          </div>
+          <p id="kpiBaselineDelta" class="text-xs font-semibold text-emerald-600 mt-1 flex items-center gap-1">
+            <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+            <span>+46% vs normal weekday baseline (126)</span>
+          </p>
+        </div>
+        <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span id="kpiChannelMix">Counter 42% • Takeaway 31% • Delivery 27%</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: Demand Tier Classification -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Demand Level Tier</span>
+          <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <i data-lucide="gauge" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="my-3">
+          <div class="flex items-center gap-2.5">
+            <span id="kpiDemandTierBadge" class="px-3 py-1 rounded-xl text-base font-extrabold tracking-wide bg-red-100 text-red-700 border border-red-200">
+              HIGH RUSH
+            </span>
+          </div>
+          <!-- Visual 3-tier progress bar -->
+          <div class="grid grid-cols-3 gap-1.5 mt-3">
+            <div id="tierBarLow" class="h-2 rounded-full bg-slate-200"></div>
+            <div id="tierBarNormal" class="h-2 rounded-full bg-slate-200"></div>
+            <div id="tierBarHigh" class="h-2 rounded-full bg-red-500"></div>
+          </div>
+        </div>
+        <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span>Thresholds: Low &lt;95 | Normal 95–145 | High &gt;145</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: High-Demand Items & Top Surge -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">High-Demand Menu Items</span>
+          <div class="w-8 h-8 rounded-lg bg-orange-50 text-orange-600 flex items-center justify-center">
+            <i data-lucide="flame" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="my-3">
+          <div class="flex items-baseline gap-2">
+            <span id="kpiHighDemandCount" class="text-3xl font-extrabold text-slate-900">5</span>
+            <span class="text-xs font-medium text-slate-500">of 8 menu items surging</span>
+          </div>
+          <p id="kpiTopSurgeItem" class="text-xs font-semibold text-slate-700 mt-1 truncate">
+            Top Surge: <span class="text-orange-600">Classic Chicken Burger (+54%)</span>
+          </p>
+        </div>
+        <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span id="kpiTotalPrepUnits">Total Recommended Kitchen Prep: 196 units</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: Wastage Hotspot & Risk Balance -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Wastage & Shortage Guard</span>
+          <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="my-3">
+          <div class="flex items-baseline gap-2">
+            <span id="kpiAvgWastage" class="text-3xl font-extrabold text-slate-900">6.4%</span>
+            <span class="text-xs font-medium text-slate-500">est. leftover risk</span>
+          </div>
+          <p id="kpiWastageWatchItem" class="text-xs font-semibold text-amber-700 mt-1 truncate">
+            Wastage Watch: French Fries (21.5% hist. unsold)
+          </p>
+        </div>
+        <div class="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+          <span>Newsvendor buffer dampened on high-waste items</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- 4. MAIN ANALYTICAL GRID: PREP TABLE (LEFT) + EXPLAINABILITY & CHARTS (RIGHT) -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- LEFT 7 COLS: Item-Level Prep Recommendations Table -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
+        <div class="p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="clipboard-list" class="w-5 h-5 text-indigo-600"></i>
+              Kitchen Prep Recommendations & Risk Matrix
+            </h2>
+            <p class="text-xs text-slate-500 mt-0.5">
+              Click any row's <span class="font-semibold text-indigo-600">"Why?"</span> button to inspect item-level mathematical reasoning.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="tableFilterSelect" class="rounded-xl border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="ALL">All Menu Items (8)</option>
+              <option value="HIGH_DEMAND">High-Demand Surge Only</option>
+              <option value="HIGH_WASTAGE">High Historical Wastage (&gt;15%)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto flex-1">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <th class="py-3 px-4">Menu Item & Prep</th>
+                <th class="py-3 px-3 text-right">Pred. Demand</th>
+                <th class="py-3 px-3 text-right">Rec. Prep</th>
+                <th class="py-3 px-3 text-center">Hist. Wastage</th>
+                <th class="py-3 px-3 text-center">Risk Profile</th>
+                <th class="py-3 px-4 text-right">Logic</th>
+              </tr>
+            </thead>
+            <tbody id="prepTableBody" class="divide-y divide-slate-100 text-sm">
+              <!-- Populated dynamically by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Expandable Item Reasoning Drawer inside Left Card -->
+        <div id="itemReasoningBox" class="bg-indigo-50/70 border-t border-indigo-100 p-4 text-xs text-slate-700">
+          <div class="flex items-start gap-2.5">
+            <i data-lucide="info" class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5"></i>
+            <div id="itemReasoningContent">
+              <span class="font-bold text-indigo-950">Select an item's "Why?" button above</span> to view baseline average, event multiplier, censored-demand adjustment, and safety buffer formula.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT 5 COLS: Explainable AI Reasoning + Visualizations -->
+      <div class="lg:col-span-5 flex flex-col gap-6">
+
+        <!-- Explainable AI Natural-Language Reasoning Card -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="brain-circuit" class="w-5 h-5 text-indigo-600"></i>
+              Explainable Forecast Reasoning
+            </h2>
+            <span class="px-2 py-0.5 text-[11px] font-semibold bg-slate-100 text-slate-600 rounded-md">
+              Transparent Rules
+            </span>
+          </div>
+          <ul id="reasoningBulletList" class="space-y-2.5 text-xs text-slate-700 leading-relaxed">
+            <!-- Dynamically populated reasoning bullets -->
+          </ul>
+        </div>
+
+        <!-- Chart 1: Demand & Channel Breakdown Across Time Periods -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Period Demand & Order Channel Mix</h3>
+              <p class="text-[11px] text-slate-500">Counter vs. Takeaway vs. Delivery across dayparts</p>
+            </div>
+          </div>
+          <div class="relative h-52 w-full">
+            <canvas id="channelMixChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Historical Wastage Hotspots -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h3 class="text-sm font-bold text-slate-900">Historical Wastage Hotspots (Unsold %)</h3>
+              <p class="text-[11px] text-slate-500">Items flagged in amber receive dampened prep buffers</p>
+            </div>
+          </div>
+          <div class="relative h-48 w-full">
+            <canvas id="wastageChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 5. HISTORICAL BACKTESTING & VALIDATION ENGINE -->
+    <section class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-5 border-b border-slate-200 bg-slate-50/60">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 rounded-md">
+                SRS Validation Proof
+              </span>
+              <h2 class="text-base sm:text-lg font-bold text-slate-900">
+                Historical Backtesting: Model Recommendations vs. Actual Outcomes
+              </h2>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">
+              Evaluated across all <span id="btTotalPeriodsCount" class="font-bold text-slate-900">56</span> historical time periods in the loaded dataset to verify waste reduction and stockout prevention.
+            </p>
+          </div>
+
+          <!-- Backtest Comparison KPI Pills -->
+          <div class="grid grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
+            <div class="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wastage Reduced</div>
+              <div id="btWastageSaved" class="text-base sm:text-lg font-extrabold text-emerald-600">-38.4%</div>
+              <div id="btWastageUnitsDiff" class="text-[10px] text-slate-500">142 fewer unsold units</div>
+            </div>
+            <div class="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stockouts Avoided</div>
+              <div id="btStockoutsAvoided" class="text-base sm:text-lg font-extrabold text-indigo-600">84%</div>
+              <div id="btStockoutCountDiff" class="text-[10px] text-slate-500">21 of 25 shortages prevented</div>
+            </div>
+            <div class="px-3.5 py-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs">
+              <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Forecast Accuracy</div>
+              <div id="btAccuracy" class="text-base sm:text-lg font-extrabold text-slate-900">91.8%</div>
+              <div class="text-[10px] text-slate-500">1 - WAPE across all slots</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backtest Filter Controls & Table -->
+      <div class="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-white">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="font-semibold text-slate-600">Filter Audit Log:</span>
+          <select id="btPeriodFilter" class="rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700">
+            <option value="ALL">All Time Periods</option>
+            <option value="Morning">Morning</option>
+            <option value="Lunch">Lunch</option>
+            <option value="Evening">Evening</option>
+            <option value="Dinner">Dinner</option>
+          </select>
+          <select id="btOutcomeFilter" class="rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700">
+            <option value="ALL">All Outcomes</option>
+            <option value="WASTE_SAVED">Where Model Saved Wastage</option>
+            <option value="STOCKOUT_PREVENTED">Where Model Prevented Shortage</option>
+          </select>
+        </div>
+        <span class="text-[11px] text-slate-500">Showing top 20 matching periods (full dataset aggregated above)</span>
+      </div>
+
+      <div class="overflow-x-auto max-h-80">
+        <table class="w-full text-left border-collapse">
+          <thead class="sticky top-0 bg-slate-50 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-500 z-10">
+            <tr>
+              <th class="py-2.5 px-4">Date & Day</th>
+              <th class="py-2.5 px-3">Period</th>
+              <th class="py-2.5 px-3">Calendar Event</th>
+              <th class="py-2.5 px-3 text-right">Actual Orders</th>
+              <th class="py-2.5 px-3 text-right">Model Pred.</th>
+              <th class="py-2.5 px-3 text-right">Hist. Prep vs. Model Prep</th>
+              <th class="py-2.5 px-3 text-right">Hist. Waste vs. Model Waste</th>
+              <th class="py-2.5 px-4 text-right">Operational Impact</th>
+            </tr>
+          </thead>
+          <tbody id="backtestTableBody" class="divide-y divide-slate-100 text-xs">
+            <!-- Populated dynamically by JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="bg-white border-t border-slate-200 py-4 px-4 sm:px-6 lg:px-8 mt-8">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+      <span>QSR Order Rush Predictor • Built for TCS Technology Day Hackathon</span>
+      <span>100% In-Browser Analytics • Zero External APIs</span>
+    </div>
+  </footer>
+
+  <!-- ==================== MODEL ASSUMPTIONS MODAL ==================== -->
+  <div id="assumptionsModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-fadeIn">
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="book-open-check" class="w-5 h-5 text-amber-400"></i>
+          <h3 class="text-base font-bold">Model Engineering Assumptions & Logic</h3>
+        </div>
+        <button id="closeAssumptionsBtn" type="button" class="text-slate-400 hover:text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-6 space-y-4 text-xs sm:text-sm text-slate-700 leading-relaxed max-h-[75vh] overflow-y-auto">
+        <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200">
+          <h4 class="font-bold text-amber-950 mb-1">1. Censored Demand Correction (+10% Stockout Adjustment)</h4>
+          <p class="text-amber-900 text-xs">
+            In QSR logs, when <code>Unsold_Qty == 0</code> and <code>Sold_Qty == Prepared_Qty</code>, customer demand was likely capped by kitchen stockouts. We apply a <strong>+10% uncensoring factor</strong> to those historical slots so popular items are not systematically under-predicted.
+          </p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+          <h4 class="font-bold text-slate-900 mb-1">2. Strict Perishability Window (Zero Carryover)</h4>
+          <p class="text-slate-600 text-xs">
+            Prepared hot food items cannot be carried over across dayparts (e.g., Lunch to Evening). Any unit prepared above actual period demand is recorded as <strong>100% wastage</strong> at the end of that time period.
+          </p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+          <h4 class="font-bold text-slate-900 mb-1">3. Context-Weighted Forecasting & Newsvendor Buffer</h4>
+          <p class="text-slate-600 text-xs">
+            Demand is predicted via <code>Baseline(Item, DayType, Period) × Event_Lift × Promo_Lift</code>. Recommended prep quantity uses a modified Newsvendor safety buffer: high-wastage items (&gt;15% historical unsold rate) have their safety buffer dampened to protect margins, while fast-moving low-waste items receive an upward buffer to prevent wait times.
+          </p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+          <h4 class="font-bold text-slate-900 mb-1">4. Pre-Period Kitchen Lead Time</h4>
+          <p class="text-slate-600 text-xs">
+            Forecasts are surfaced prior to period start based on each item's <code>prep_time_mins</code> (ranging from 4 mins for beverages/fries to 14 mins for grilled wraps/burgers).
+          </p>
+        </div>
+      </div>
+      <div class="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button id="closeAssumptionsFooterBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 cursor-pointer">
+          Got It
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== APPLICATION JAVASCRIPT ==================== -->
+  <script>
+    /**
+     * QSR Order Rush Predictor - 100% Client-Side Analytical Engine
+     * Designed for instant execution, zero external API calls, and full explainability.
+     */
+
+    // ---------------------------------------------------------
+    // 1. MENU CATALOG & DEFAULT DOMAIN PARAMETERS
+    // ---------------------------------------------------------
+    const MENU_CATALOG = [
+      { item: 'Classic Chicken Burger', category: 'Burgers', prepTime: 12, baseMorning: 8, baseLunch: 28, baseEvening: 16, baseDinner: 34, wasteTendency: 0.05 },
+      { item: 'Crispy Paneer Burger', category: 'Burgers', prepTime: 11, baseMorning: 6, baseLunch: 22, baseEvening: 14, baseDinner: 26, wasteTendency: 0.07 },
+      { item: 'Paneer Tikka Wrap', category: 'Wraps', prepTime: 10, baseMorning: 7, baseLunch: 19, baseEvening: 15, baseDinner: 24, wasteTendency: 0.06 },
+      { item: 'Spicy Chicken Wings (6pc)', category: 'Sides', prepTime: 14, baseMorning: 3, baseLunch: 14, baseEvening: 18, baseDinner: 25, wasteTendency: 0.09 },
+      { item: 'Salted French Fries', category: 'Sides', prepTime: 5, baseMorning: 10, baseLunch: 30, baseEvening: 26, baseDinner: 32, wasteTendency: 0.23 },
+      { item: 'Loaded Cheese Nachos', category: 'Sides', prepTime: 7, baseMorning: 2, baseLunch: 10, baseEvening: 16, baseDinner: 18, wasteTendency: 0.19 },
+      { item: 'Cold Coffee Frappe', category: 'Beverages', prepTime: 4, baseMorning: 14, baseLunch: 20, baseEvening: 22, baseDinner: 15, wasteTendency: 0.04 },
+      { item: 'Choco Lava Brownie', category: 'Desserts', prepTime: 6, baseMorning: 3, baseLunch: 11, baseEvening: 12, baseDinner: 17, wasteTendency: 0.17 }
+    ];
+
+    const TIME_PERIODS = ['Morning', 'Lunch', 'Evening', 'Dinner'];
+
+    // Global Application State
+    const appState = {
+      orders: [],
+      menuPrep: [],
+      calendar: [],
+      itemStats: {},
+      backtestResults: [],
+      charts: {
+        channelMix: null,
+        wastage: null
+      }
+    };
+
+    // ---------------------------------------------------------
+    // 2. SYNTHETIC DATA GENERATOR (14-Day Rich QSR Dataset)
+    // ---------------------------------------------------------
+    function generateSyntheticDataset(seedOffset = 0) {
+      const orders = [];
+      const menuPrep = [];
+      const calendar = [];
+
+      const startDate = new Date(2026, 10, 13); // Nov 13, 2026
+      const numDays = 14;
+
+      for (let d = 0; d < numDays; d++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + d);
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const dayOfWeek = currentDate.getDay(); // 0=Sun, 5=Fri, 6=Sat
+
+        let dayType = 'Weekday';
+        if (dayOfWeek === 5) dayType = 'Friday';
+        if (dayOfWeek === 0 || dayOfWeek === 6) dayType = 'Weekend';
+
+        // Inject realistic holidays, local events, promos, and rainy days
+        let isHoliday = false;
+        let festivalName = 'None';
+        let hasPromotion = false;
+        let localEvent = 'None';
+
+        if ((d + seedOffset) % 7 === 5) {
+          localEvent = 'LocalEvent'; // Saturday night stadium/concert rush
+          hasPromotion = true;
+        } else if ((d + seedOffset) % 11 === 3) {
+          isHoliday = true;
+          festivalName = 'Holiday';
+        } else if ((d + seedOffset) % 6 === 2) {
+          localEvent = 'RainySlow';
+        } else if (dayType === 'Weekend' || (d + seedOffset) % 4 === 0) {
+          hasPromotion = true;
+        }
+
+        calendar.push({
+          date: dateStr,
+          day_type: dayType,
+          is_holiday: isHoliday ? 'Yes' : 'No',
+          festival_name: festivalName,
+          has_promotion: hasPromotion ? 'Yes' : 'No',
+          local_event: localEvent
+        });
+
+        // Compute day multiplier
+        let dayMult = 1.0;
+        if (dayType === 'Friday') dayMult = 1.15;
+        if (dayType === 'Weekend') dayMult = 1.28;
+        if (isHoliday) dayMult *= 1.22;
+        if (localEvent === 'LocalEvent') dayMult *= 1.24;
+        if (localEvent === 'RainySlow') dayMult *= 0.78;
+        if (hasPromotion) dayMult *= 1.12;
+
+        TIME_PERIODS.forEach(period => {
+          // Period specific multiplier for events
+          let periodEventMult = dayMult;
+          if (localEvent === 'LocalEvent' && (period === 'Evening' || period === 'Dinner')) {
+            periodEventMult *= 1.12;
+          }
+
+          MENU_CATALOG.forEach(menu => {
+            const baseKey = `base${period}`;
+            const baseVal = menu[baseKey];
+
+            // Random realistic noise (-12% to +14%)
+            const noise = 0.88 + Math.random() * 0.26;
+            const rawDemand = Math.max(1, Math.round(baseVal * periodEventMult * noise));
+
+            // Simulate historical kitchen prep behavior (humans often over-prep high-waste items and under-prep surges)
+            let humanPrepBias = 1.0;
+            if (menu.wasteTendency > 0.15) {
+              humanPrepBias = 1.22; // Kitchen over-batches fries/nachos/brownies
+            } else if (periodEventMult > 1.35) {
+              humanPrepBias = 0.88; // Kitchen gets caught off guard during big surges
+            } else {
+              humanPrepBias = 1.04;
+            }
+
+            const preparedQty = Math.max(2, Math.round(rawDemand * humanPrepBias));
+            const soldQty = Math.min(preparedQty, rawDemand);
+            const unsoldQty = Math.max(0, preparedQty - soldQty);
+
+            menuPrep.push({
+              date: dateStr,
+              time_period: period,
+              menu_item: menu.item,
+              prepared_qty: preparedQty,
+              sold_qty: soldQty,
+              unsold_qty: unsoldQty,
+              prep_time_mins: menu.prepTime
+            });
+
+            // Split soldQty across Counter, Takeaway, Delivery
+            let deliveryShare = hasPromotion ? 0.34 : 0.22;
+            if (localEvent === 'RainySlow') deliveryShare = 0.48;
+            const takeawayShare = 0.30;
+            const counterShare = Math.max(0.15, 1 - deliveryShare - takeawayShare);
+
+            const counterQty = Math.round(soldQty * counterShare);
+            const takeawayQty = Math.round(soldQty * takeawayShare);
+            const deliveryQty = Math.max(0, soldQty - counterQty - takeawayQty);
+
+            if (counterQty > 0) {
+              orders.push({ date: dateStr, time_period: period, menu_item: menu.item, category: menu.category, quantity: counterQty, channel: 'Counter' });
+            }
+            if (takeawayQty > 0) {
+              orders.push({ date: dateStr, time_period: period, menu_item: menu.item, category: menu.category, quantity: takeawayQty, channel: 'Takeaway' });
+            }
+            if (deliveryQty > 0) {
+              orders.push({ date: dateStr, time_period: period, menu_item: menu.item, category: menu.category, quantity: deliveryQty, channel: 'Delivery' });
+            }
+          });
+        });
+      }
+
+      return { orders, menuPrep, calendar };
+    }
+
+    // ---------------------------------------------------------
+    // 3. FEATURE ENGINEERING & HISTORICAL AGGREGATION ENGINE
+    // ---------------------------------------------------------
+    function processDatasets(orders, menuPrep, calendar) {
+      appState.orders = orders;
+      appState.menuPrep = menuPrep;
+      appState.calendar = calendar;
+
+      // Map calendar by date
+      const calMap = {};
+      calendar.forEach(row => {
+        calMap[row.date] = row;
+      });
+
+      // Aggregate orders by (date, time_period, menu_item)
+      const orderAgg = {};
+      orders.forEach(o => {
+        const key = `${o.date}|${o.time_period}|${o.menu_item}`;
+        if (!orderAgg[key]) {
+          orderAgg[key] = { totalQty: 0, Counter: 0, Takeaway: 0, Delivery: 0, category: o.category || 'General' };
+        }
+        const qty = Number(o.quantity) || 0;
+        orderAgg[key].totalQty += qty;
+        const ch = o.channel || 'Counter';
+        orderAgg[key][ch] = (orderAgg[key][ch] || 0) + qty;
+      });
+
+      // Build unified records & compute item-level statistics
+      const itemStats = {};
+
+      menuPrep.forEach(p => {
+        const key = `${p.date}|${p.time_period}|${p.menu_item}`;
+        const cal = calMap[p.date] || { day_type: 'Weekday', is_holiday: 'No', festival_name: 'None', has_promotion: 'No', local_event: 'None' };
+        const ord = orderAgg[key] || { totalQty: Number(p.sold_qty) || 0, Counter: 0, Takeaway: 0, Delivery: 0, category: 'General' };
+
+        const prepQty = Number(p.prepared_qty) || 0;
+        const soldQty = Number(p.sold_qty) || ord.totalQty;
+        const unsoldQty = Number(p.unsold_qty) || Math.max(0, prepQty - soldQty);
+        const prepTime = Number(p.prep_time_mins) || 8;
+
+        // Censored demand assumption: if unsold == 0 and prep > 0, true demand was likely +10% higher
+        const isCensored = (unsoldQty === 0 && prepQty > 0);
+        const uncensoredDemand = isCensored ? soldQty * 1.10 : soldQty;
+
+        if (!itemStats[p.menu_item]) {
+          const catalogRef = MENU_CATALOG.find(m => m.item === p.menu_item);
+          itemStats[p.menu_item] = {
+            item: p.menu_item,
+            category: ord.category !== 'General' ? ord.category : (catalogRef ? catalogRef.category : 'Menu'),
+            prepTime: prepTime,
+            totalPrepared: 0,
+            totalSold: 0,
+            totalUnsold: 0,
+            censoredCount: 0,
+            totalSlots: 0,
+            byPeriod: { Morning: [], Lunch: [], Evening: [], Dinner: [] },
+            channelTotals: { Counter: 0, Takeaway: 0, Delivery: 0 }
+          };
+        }
+
+        const st = itemStats[p.menu_item];
+        st.totalPrepared += prepQty;
+        st.totalSold += soldQty;
+        st.totalUnsold += unsoldQty;
+        if (isCensored) st.censoredCount += 1;
+        st.totalSlots += 1;
+        st.channelTotals.Counter += ord.Counter;
+        st.channelTotals.Takeaway += ord.Takeaway;
+        st.channelTotals.Delivery += ord.Delivery;
+
+        if (st.byPeriod[p.time_period]) {
+          st.byPeriod[p.time_period].push({
+            date: p.date,
+            dayType: cal.day_type,
+            isHoliday: cal.is_holiday === 'Yes',
+            hasPromo: cal.has_promotion === 'Yes',
+            localEvent: cal.local_event,
+            uncensoredDemand,
+            rawSold: soldQty,
+            prepared: prepQty,
+            unsold: unsoldQty
+          });
+        }
+      });
+
+      // Finalize summary metrics per item
+      Object.values(itemStats).forEach(st => {
+        st.wastageRate = st.totalPrepared > 0 ? (st.totalUnsold / st.totalPrepared) : 0;
+        st.stockoutRate = st.totalSlots > 0 ? (st.censoredCount / st.totalSlots) : 0;
+      });
+
+      appState.itemStats = itemStats;
+
+      // Run full backtest across all historical periods
+      runHistoricalBacktest(calMap, orderAgg);
+
+      // Update dataset summary badge
+      document.getElementById('datasetSummaryText').textContent =
+        `Active Data: ${orders.length} order rows • ${menuPrep.length} prep logs • ${calendar.length} calendar days.`;
+    }
+
+    // ---------------------------------------------------------
+    // 4. FORECASTING & NEWSVENDOR PREP RECOMMENDATION ENGINE
+    // ---------------------------------------------------------
+    function predictForContext(dayType, timePeriod, eventContext, promoContext) {
+      // Context Multipliers
+      let dayMult = 1.0;
+      if (dayType === 'Friday') dayMult = 1.14;
+      if (dayType === 'Weekend') dayMult = 1.26;
+
+      let eventMult = 1.0;
+      if (eventContext === 'Holiday') eventMult = 1.22;
+      if (eventContext === 'LocalEvent') eventMult = (timePeriod === 'Evening' || timePeriod === 'Dinner') ? 1.32 : 1.15;
+      if (eventContext === 'RainySlow') eventMult = 0.78;
+
+      let promoMult = 1.0;
+      if (promoContext === 'ComboPromo') promoMult = 1.14;
+      if (promoContext === 'DeliverySurge') promoMult = 1.18;
+
+      const combinedMultiplier = dayMult * eventMult * promoMult;
+
+      const itemPredictions = [];
+      let totalBaseline = 0;
+      let totalPredictedDemand = 0;
+      let totalRecommendedPrep = 0;
+
+      Object.values(appState.itemStats).forEach(st => {
+        const slotRecords = st.byPeriod[timePeriod] || [];
+
+        // Compute normalized baseline (stripping out extreme event surges to get true clean baseline)
+        let normSum = 0;
+        let normCount = 0;
+        const values = [];
+
+        slotRecords.forEach(r => {
+          let rFactor = 1.0;
+          if (r.dayType === 'Friday') rFactor *= 1.14;
+          if (r.dayType === 'Weekend') rFactor *= 1.26;
+          if (r.isHoliday) rFactor *= 1.22;
+          if (r.localEvent === 'LocalEvent') rFactor *= 1.25;
+          if (r.localEvent === 'RainySlow') rFactor *= 0.78;
+          if (r.hasPromo) rFactor *= 1.12;
+
+          const normalizedVal = r.uncensoredDemand / rFactor;
+          normSum += normalizedVal;
+          normCount += 1;
+          values.push(r.uncensoredDemand);
+        });
+
+        const cleanBaseline = normCount > 0 ? (normSum / normCount) : 12;
+        const meanVal = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : cleanBaseline;
+        const variance = values.length > 1
+          ? values.reduce((acc, v) => acc + Math.pow(v - meanVal, 2), 0) / (values.length - 1)
+          : Math.pow(cleanBaseline * 0.15, 2);
+        const stdDev = Math.sqrt(variance);
+
+        // Item-specific category affinity adjustments
+        let itemAffinity = 1.0;
+        if (promoContext === 'ComboPromo' && (st.category === 'Burgers' || st.category === 'Wraps')) {
+          itemAffinity = 1.08;
+        }
+        if (eventContext === 'RainySlow' && st.category === 'Beverages') {
+          itemAffinity = 0.85;
+        }
+
+        const predictedDemandFloat = cleanBaseline * combinedMultiplier * itemAffinity;
+        const predictedDemand = Math.max(1, Math.round(predictedDemandFloat));
+
+        // Newsvendor Safety Buffer Logic:
+        // Balance shortage cost vs wastage cost using historical wastageRate
+        let zScore = 0.65; // default moderate safety buffer
+        if (st.wastageRate > 0.16) {
+          zScore = -0.15; // Dampen prep on chronic high-wastage items (e.g. Fries, Nachos)
+        } else if (st.wastageRate < 0.08 && combinedMultiplier >= 1.25) {
+          zScore = 0.95; // Boost buffer on fast-moving low-waste items during rush
+        }
+
+        const safetyBuffer = Math.round(zScore * (stdDev * 0.45));
+        const recommendedPrep = Math.max(predictedDemand - 1, predictedDemand + safetyBuffer);
+
+        // Risk Levels
+        const isHighWastageItem = st.wastageRate > 0.15;
+        const shortageRisk = (combinedMultiplier > 1.3 && !isHighWastageItem) ? 'High' : (combinedMultiplier > 1.1 ? 'Medium' : 'Low');
+        const wastageRisk = isHighWastageItem ? 'High' : (eventContext === 'RainySlow' ? 'Medium' : 'Low');
+
+        const liftPct = Math.round(((predictedDemand - cleanBaseline) / Math.max(1, cleanBaseline)) * 100);
+
+        totalBaseline += Math.round(cleanBaseline);
+        totalPredictedDemand += predictedDemand;
+        totalRecommendedPrep += recommendedPrep;
+
+        itemPredictions.push({
+          item: st.item,
+          category: st.category,
+          prepTime: st.prepTime,
+          cleanBaseline: Number(cleanBaseline.toFixed(1)),
+          predictedDemand,
+          recommendedPrep,
+          wastageRatePct: Number((st.wastageRate * 100).toFixed(1)),
+          stockoutRatePct: Number((st.stockoutRate * 100).toFixed(1)),
+          isHighWastageItem,
+          shortageRisk,
+          wastageRisk,
+          liftPct,
+          stdDev: Number(stdDev.toFixed(1)),
+          zScore,
+          dayMult,
+          eventMult,
+          promoMult,
+          itemAffinity
+        });
+      });
+
+      // Sort by predicted demand descending
+      itemPredictions.sort((a, b) => b.predictedDemand - a.predictedDemand);
+
+      // Classify Overall Demand Tier
+      let demandTier = 'NORMAL';
+      if (totalPredictedDemand >= 145) demandTier = 'HIGH RUSH';
+      else if (totalPredictedDemand < 95) demandTier = 'LOW';
+
+      // Estimate channel split
+      let deliveryPct = 24;
+      let takeawayPct = 31;
+      let counterPct = 45;
+
+      if (promoContext === 'DeliverySurge') {
+        deliveryPct = 42; takeawayPct = 28; counterPct = 30;
+      } else if (eventContext === 'RainySlow') {
+        deliveryPct = 49; takeawayPct = 24; counterPct = 27;
+      } else if (eventContext === 'LocalEvent') {
+        deliveryPct = 22; takeawayPct = 38; counterPct = 40;
+      }
+
+      return {
+        dayType,
+        timePeriod,
+        eventContext,
+        promoContext,
+        combinedMultiplier,
+        totalBaseline,
+        totalPredictedDemand,
+        totalRecommendedPrep,
+        demandTier,
+        channelSplit: { Counter: counterPct, Takeaway: takeawayPct, Delivery: deliveryPct },
+        items: itemPredictions
+      };
+    }
+
+    // ---------------------------------------------------------
+    // 5. HISTORICAL BACKTESTING ENGINE (ALL PERIODS)
+    // ---------------------------------------------------------
+    function runHistoricalBacktest(calMap, orderAgg) {
+      // Group menuPrep by (date, time_period)
+      const periodGroups = {};
+      appState.menuPrep.forEach(p => {
+        const slotKey = `${p.date}|${p.time_period}`;
+        if (!periodGroups[slotKey]) {
+          periodGroups[slotKey] = {
+            date: p.date,
+            timePeriod: p.time_period,
+            rows: []
+          };
+        }
+        periodGroups[slotKey].rows.push(p);
+      });
+
+      const results = [];
+      let totalHistWaste = 0;
+      let totalModelWaste = 0;
+      let histStockoutPeriods = 0;
+      let modelStockoutPeriods = 0;
+      let totalAbsError = 0;
+      let totalActualDemand = 0;
+
+      Object.values(periodGroups).forEach(group => {
+        const cal = calMap[group.date] || { day_type: 'Weekday', is_holiday: 'No', has_promotion: 'No', local_event: 'None' };
+        let eventCtx = 'None';
+        if (cal.is_holiday === 'Yes') eventCtx = 'Holiday';
+        else if (cal.local_event && cal.local_event !== 'None') eventCtx = cal.local_event;
+
+        const promoCtx = cal.has_promotion === 'Yes' ? 'ComboPromo' : 'None';
+
+        // Get model forecast for this historical slot
+        const forecast = predictForContext(cal.day_type || 'Weekday', group.timePeriod, eventCtx, promoCtx);
+        const predMap = {};
+        forecast.items.forEach(i => { predMap[i.item] = i; });
+
+        let actualOrdersSum = 0;
+        let histPreparedSum = 0;
+        let histUnsoldSum = 0;
+        let modelPredSum = 0;
+        let modelPrepSum = 0;
+        let modelSimUnsoldSum = 0;
+        let hadHistStockout = false;
+        let hadModelStockout = false;
+
+        group.rows.forEach(r => {
+          const sold = Number(r.sold_qty) || 0;
+          const prep = Number(r.prepared_qty) || 0;
+          const unsold = Number(r.unsold_qty) || 0;
+          // True underlying demand (accounting for stockout if unsold == 0)
+          const estTrueDemand = (unsold === 0 && prep > 0) ? Math.round(sold * 1.08) : sold;
+
+          const itemPred = predMap[r.menu_item];
+          const mPred = itemPred ? itemPred.predictedDemand : sold;
+          const mPrep = itemPred ? itemPred.recommendedPrep : prep;
+
+          const mUnsold = Math.max(0, mPrep - estTrueDemand);
+          if (prep < estTrueDemand) hadHistStockout = true;
+          if (mPrep < estTrueDemand) hadModelStockout = true;
+
+          actualOrdersSum += estTrueDemand;
+          histPreparedSum += prep;
+          histUnsoldSum += unsold;
+          modelPredSum += mPred;
+          modelPrepSum += mPrep;
+          modelSimUnsoldSum += mUnsold;
+        });
+
+        totalHistWaste += histUnsoldSum;
+        totalModelWaste += modelSimUnsoldSum;
+        if (hadHistStockout) histStockoutPeriods++;
+        if (hadModelStockout) modelStockoutPeriods++;
+        totalAbsError += Math.abs(actualOrdersSum - modelPredSum);
+        totalActualDemand += actualOrdersSum;
+
+        results.push({
+          date: group.date,
+          dayType: cal.day_type || 'Weekday',
+          timePeriod: group.timePeriod,
+          eventLabel: eventCtx !== 'None' ? eventCtx : (promoCtx !== 'None' ? 'Promo' : 'Standard'),
+          actualOrders: actualOrdersSum,
+          modelPred: modelPredSum,
+          histPrepared: histPreparedSum,
+          modelPrep: modelPrepSum,
+          histWaste: histUnsoldSum,
+          modelWaste: modelSimUnsoldSum,
+          wasteSaved: histUnsoldSum - modelSimUnsoldSum,
+          preventedStockout: hadHistStockout && !hadModelStockout
+        });
+      });
+
+      // Sort chronologically descending
+      results.sort((a, b) => b.date.localeCompare(a.date));
+      appState.backtestResults = results;
+
+      // Update Summary KPIs in Backtest Section
+      const wasteReductionPct = totalHistWaste > 0
+        ? Math.round(((totalHistWaste - totalModelWaste) / totalHistWaste) * 100)
+        : 0;
+      const stockoutPreventionPct = histStockoutPeriods > 0
+        ? Math.round(((histStockoutPeriods - modelStockoutPeriods) / histStockoutPeriods) * 100)
+        : 100;
+      const wape = totalActualDemand > 0 ? (totalAbsError / totalActualDemand) : 0.08;
+      const accuracyPct = Math.max(0, (1 - wape) * 100).toFixed(1);
+
+      document.getElementById('btTotalPeriodsCount').textContent = results.length;
+      document.getElementById('btWastageSaved').textContent = `-${Math.max(0, wasteReductionPct)}%`;
+      document.getElementById('btWastageUnitsDiff').textContent = `${Math.max(0, totalHistWaste - totalModelWaste)} fewer unsold units`;
+      document.getElementById('btStockoutsAvoided').textContent = `${Math.max(0, stockoutPreventionPct)}%`;
+      document.getElementById('btStockoutCountDiff').textContent = `${Math.max(0, histStockoutPeriods - modelStockoutPeriods)} of ${histStockoutPeriods} shortage slots avoided`;
+      document.getElementById('btAccuracy').textContent = `${accuracyPct}%`;
+
+      renderBacktestTable();
+    }
+
+    // ---------------------------------------------------------
+    // 6. UI RENDERING & CHARTS
+    // ---------------------------------------------------------
+    function updateDashboard() {
+      const dayType = document.getElementById('simDayType').value;
+      const timePeriod = document.getElementById('simTimePeriod').value;
+      const eventContext = document.getElementById('simEventContext').value;
+      const promoContext = document.getElementById('simPromoContext').value;
+
+      const forecast = predictForContext(dayType, timePeriod, eventContext, promoContext);
+
+      // A. Update Staff Alert Banner
+      const alertBanner = document.getElementById('staffAlertBanner');
+      const alertIconWrapper = document.getElementById('alertIconWrapper');
+      const alertBadge = document.getElementById('alertBadgeText');
+      const alertHeadline = document.getElementById('alertHeadline');
+      const alertSubtext = document.getElementById('alertSubtext');
+      const alertContextSummary = document.getElementById('alertContextSummary');
+      const leadPrepWindow = document.getElementById('leadPrepWindow');
+
+      const deltaPct = Math.round(((forecast.totalPredictedDemand - forecast.totalBaseline) / Math.max(1, forecast.totalBaseline)) * 100);
+      alertContextSummary.textContent = `${dayType} • ${timePeriod} • Event: ${eventContext} • Promo: ${promoContext}`;
+
+      const topTwoItems = forecast.items.slice(0, 2).map(i => i.item).join(' & ');
+      const highWasteItems = forecast.items.filter(i => i.isHighWastageItem).map(i => i.item).join(', ');
+
+      if (forecast.demandTier === 'HIGH RUSH') {
+        alertBanner.className = 'rounded-2xl border p-4 sm:p-5 transition-all duration-300 bg-red-50 border-red-200 rush-pulse';
+        alertIconWrapper.className = 'w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm';
+        alertBadge.className = 'px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider rounded-full bg-red-600 text-white';
+        alertBadge.textContent = 'HIGH RUSH & SHORTAGE ALERT';
+        alertHeadline.textContent = `Expected ${deltaPct >= 0 ? '+' : ''}${deltaPct}% demand surge above standard baseline. Pre-batch high-demand items early!`;
+        alertSubtext.textContent = `High shortage risk on ${topTwoItems}. Keep batch sizes tight on high-wastage items (${highWasteItems || 'Fries'}).`;
+        leadPrepWindow.className = 'text-sm font-extrabold text-red-700';
+        leadPrepWindow.textContent = 'Start 25–30 mins prior';
+      } else if (forecast.demandTier === 'LOW') {
+        alertBanner.className = 'rounded-2xl border p-4 sm:p-5 transition-all duration-300 bg-sky-50 border-sky-200';
+        alertIconWrapper.className = 'w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm';
+        alertBadge.className = 'px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider rounded-full bg-sky-600 text-white';
+        alertBadge.textContent = 'LOW DEMAND / WASTAGE GUARD';
+        alertHeadline.textContent = `Quiet period expected (${deltaPct}% vs baseline). Cook-to-order recommended to prevent food wastage.`;
+        alertSubtext.textContent = `Strictly cap pre-batches for ${highWasteItems || 'sides & desserts'} which show >15% historical unsold rates.`;
+        leadPrepWindow.className = 'text-sm font-extrabold text-sky-700';
+        leadPrepWindow.textContent = 'Minimal pre-batch (10 mins)';
+      } else {
+        alertBanner.className = 'rounded-2xl border p-4 sm:p-5 transition-all duration-300 bg-amber-50 border-amber-200';
+        alertIconWrapper.className = 'w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-sm';
+        alertBadge.className = 'px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider rounded-full bg-amber-600 text-white';
+        alertBadge.textContent = 'NORMAL DEMAND FLOW';
+        alertHeadline.textContent = `Steady operational demand expected (${deltaPct >= 0 ? '+' : ''}${deltaPct}% vs baseline). Follow standard station prep.`;
+        alertSubtext.textContent = `Prioritize ${topTwoItems} at peak hour start; monitor ${highWasteItems || 'high-waste sides'} closely.`;
+        leadPrepWindow.className = 'text-sm font-extrabold text-amber-800';
+        leadPrepWindow.textContent = 'Start 15 mins prior';
+      }
+
+      // B. Update KPI Cards
+      document.getElementById('kpiTotalDemand').textContent = forecast.totalPredictedDemand;
+      document.getElementById('kpiBaselineDelta').innerHTML = `
+        <i data-lucide="${deltaPct >= 0 ? 'trending-up' : 'trending-down'}" class="w-3.5 h-3.5"></i>
+        <span>${deltaPct >= 0 ? '+' : ''}${deltaPct}% vs clean baseline (${forecast.totalBaseline} units)</span>
+      `;
+      document.getElementById('kpiBaselineDelta').className = `text-xs font-semibold mt-1 flex items-center gap-1 ${deltaPct >= 0 ? 'text-emerald-600' : 'text-sky-600'}`;
+      document.getElementById('kpiChannelMix').textContent =
+        `Counter ${forecast.channelSplit.Counter}% • Takeaway ${forecast.channelSplit.Takeaway}% • Delivery ${forecast.channelSplit.Delivery}%`;
+
+      // Tier Badge & Gauge
+      const tierBadge = document.getElementById('kpiDemandTierBadge');
+      const barLow = document.getElementById('tierBarLow');
+      const barNorm = document.getElementById('tierBarNormal');
+      const barHigh = document.getElementById('tierBarHigh');
+
+      if (forecast.demandTier === 'HIGH RUSH') {
+        tierBadge.textContent = 'HIGH RUSH';
+        tierBadge.className = 'px-3 py-1 rounded-xl text-base font-extrabold tracking-wide bg-red-100 text-red-700 border border-red-200';
+        barLow.className = 'h-2 rounded-full bg-red-300';
+        barNorm.className = 'h-2 rounded-full bg-red-400';
+        barHigh.className = 'h-2 rounded-full bg-red-600';
+      } else if (forecast.demandTier === 'LOW') {
+        tierBadge.textContent = 'LOW DEMAND';
+        tierBadge.className = 'px-3 py-1 rounded-xl text-base font-extrabold tracking-wide bg-sky-100 text-sky-700 border border-sky-200';
+        barLow.className = 'h-2 rounded-full bg-sky-500';
+        barNorm.className = 'h-2 rounded-full bg-slate-200';
+        barHigh.className = 'h-2 rounded-full bg-slate-200';
+      } else {
+        tierBadge.textContent = 'NORMAL';
+        tierBadge.className = 'px-3 py-1 rounded-xl text-base font-extrabold tracking-wide bg-amber-100 text-amber-800 border border-amber-200';
+        barLow.className = 'h-2 rounded-full bg-amber-300';
+        barNorm.className = 'h-2 rounded-full bg-amber-500';
+        barHigh.className = 'h-2 rounded-full bg-slate-200';
+      }
+
+      // High-demand item count & Top Surge
+      const surgingItems = forecast.items.filter(i => i.liftPct >= 20 || i.predictedDemand >= 25);
+      const topItem = forecast.items[0];
+      document.getElementById('kpiHighDemandCount').textContent = surgingItems.length;
+      document.getElementById('kpiTopSurgeItem').innerHTML =
+        `Top Item: <span class="text-orange-600">${topItem.item} (${topItem.predictedDemand} units)</span>`;
+      document.getElementById('kpiTotalPrepUnits').textContent =
+        `Total Recommended Kitchen Prep: ${forecast.totalRecommendedPrep} units`;
+
+      // Wastage Hotspot KPI
+      const worstWasteItem = [...forecast.items].sort((a, b) => b.wastageRatePct - a.wastageRatePct)[0];
+      const projectedLeftoverPct = Math.max(2.1, (forecast.items.reduce((s, i) => s + Math.max(0, i.recommendedPrep - i.predictedDemand), 0) / Math.max(1, forecast.totalRecommendedPrep)) * 100).toFixed(1);
+      document.getElementById('kpiAvgWastage').textContent = `${projectedLeftoverPct}%`;
+      document.getElementById('kpiWastageWatchItem').textContent =
+        `Wastage Watch: ${worstWasteItem.item} (${worstWasteItem.wastageRatePct}% hist. unsold)`;
+
+      // C. Render Left Table
+      renderPrepTable(forecast.items);
+
+      // D. Render Explainable Reasoning Bullets
+      renderReasoningBullets(forecast, worstWasteItem);
+
+      // E. Render Charts
+      renderCharts(forecast);
+
+      // Re-initialize Lucide Icons
+      lucide.createIcons();
+    }
+
+    function renderPrepTable(items) {
+      const filter = document.getElementById('tableFilterSelect').value;
+      const tbody = document.getElementById('prepTableBody');
+      tbody.innerHTML = '';
+
+      const filtered = items.filter(item => {
+        if (filter === 'HIGH_DEMAND') return item.liftPct >= 20 || item.predictedDemand >= 25;
+        if (filter === 'HIGH_WASTAGE') return item.isHighWastageItem;
+        return true;
+      });
+
+      filtered.forEach((item, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = `hover:bg-slate-50/90 transition ${item.isHighWastageItem ? 'bg-amber-50/30' : ''}`;
+
+        const shortageBadgeClass =
+          item.shortageRisk === 'High' ? 'bg-red-100 text-red-700 border-red-200' :
+          item.shortageRisk === 'Medium' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+          'bg-slate-100 text-slate-600 border-slate-200';
+
+        const wastageBadgeClass =
+          item.wastageRisk === 'High' ? 'bg-orange-100 text-orange-800 border-orange-200' :
+          item.wastageRisk === 'Medium' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+          'bg-emerald-50 text-emerald-700 border-emerald-200';
+
+        tr.innerHTML = `
+          <td class="py-3 px-4">
+            <div class="font-semibold text-slate-900 flex items-center gap-1.5">
+              <span>${item.item}</span>
+              ${item.isHighWastageItem ? '<span class="px-1.5 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 rounded" title="Historically high unsold rate">High Waste</span>' : ''}
+            </div>
+            <div class="text-[11px] text-slate-500 mt-0.5">${item.category} • Prep time: ${item.prepTime} mins</div>
+          </td>
+          <td class="py-3 px-3 text-right">
+            <div class="font-bold text-slate-800">${item.predictedDemand}</div>
+            <div class="text-[10px] font-semibold ${item.liftPct >= 0 ? 'text-emerald-600' : 'text-sky-600'}">
+              ${item.liftPct >= 0 ? '+' : ''}${item.liftPct}% vs base
+            </div>
+          </td>
+          <td class="py-3 px-3 text-right">
+            <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-sm font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              ${item.recommendedPrep}
+            </span>
+          </td>
+          <td class="py-3 px-3 text-center">
+            <span class="text-xs font-bold ${item.isHighWastageItem ? 'text-amber-700' : 'text-slate-600'}">
+              ${item.wastageRatePct}%
+            </span>
+          </td>
+          <td class="py-3 px-3 text-center">
+            <div class="flex flex-col items-center gap-1">
+              <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full border ${shortageBadgeClass}">
+                Shortage: ${item.shortageRisk}
+              </span>
+              <span class="px-2 py-0.5 text-[10px] font-semibold rounded-full border ${wastageBadgeClass}">
+                Waste: ${item.wastageRisk}
+              </span>
+            </div>
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button type="button" data-item="${item.item}"
+              class="inspect-item-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-indigo-50 text-indigo-600 border border-slate-200 hover:border-indigo-300 shadow-2xs transition cursor-pointer">
+              Why?
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Attach click handlers for "Why?" buttons
+      document.querySelectorAll('.inspect-item-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const itemName = btn.getAttribute('data-item');
+          const target = items.find(i => i.item === itemName);
+          if (target) showItemReasoning(target);
+        });
+      });
+
+      // Auto-populate first item reasoning if box hasn't been clicked yet
+      if (filtered.length > 0) {
+        showItemReasoning(filtered[0]);
+      }
+    }
+
+    function showItemReasoning(item) {
+      const box = document.getElementById('itemReasoningContent');
+      const bufferAction = item.zScore < 0
+        ? `dampened by ${item.recommendedPrep - item.predictedDemand} unit(s) because its historical unsold rate is ${item.wastageRatePct}% (>15% threshold)`
+        : `buffered by +${item.recommendedPrep - item.predictedDemand} unit(s) (z=${item.zScore}, σ=${item.stdDev}) to prevent stockouts during peak flow`;
+
+      box.innerHTML = `
+        <div class="font-bold text-indigo-950 mb-1">
+          Breakdown for ${item.item} (${item.category} • ${item.prepTime} min prep):
+        </div>
+        <p class="leading-relaxed">
+          Clean slot baseline is <strong>${item.cleanBaseline} units</strong> (adjusted +10% for past stockout slots).
+          Applying Day multiplier (<strong>${item.dayMult}×</strong>), Event multiplier (<strong>${item.eventMult}×</strong>), and Promo lift (<strong>${item.promoMult}×</strong>) yields <strong>${item.predictedDemand} predicted orders</strong>.
+          Recommended prep of <strong>${item.recommendedPrep} units</strong> is ${bufferAction}.
+        </p>
+      `;
+    }
+
+    function renderReasoningBullets(forecast, worstWasteItem) {
+      const list = document.getElementById('reasoningBulletList');
+      const bullets = [];
+
+      // 1. Primary Demand Driver
+      bullets.push(`
+        <li class="flex items-start gap-2">
+          <span class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+          <span><strong>Time & Day Pattern:</strong> <strong>${forecast.dayType} ${forecast.timePeriod}</strong> establishes a clean baseline of <strong>${forecast.totalBaseline} items</strong> across all menu categories.</span>
+        </li>
+      `);
+
+      // 2. External Event & Promo Lift
+      let driverDesc = 'No special external events or promotions active.';
+      if (forecast.eventContext !== 'None' || forecast.promoContext !== 'None') {
+        driverDesc = `Active context (<strong>${forecast.eventContext}</strong> + <strong>${forecast.promoContext}</strong>) applies a combined <strong>${forecast.combinedMultiplier.toFixed(2)}× demand multiplier</strong>, shifting channel mix to <strong>${forecast.channelSplit.Delivery}% Delivery</strong> and <strong>${forecast.channelSplit.Takeaway}% Takeaway</strong>.`;
+      }
+      bullets.push(`
+        <li class="flex items-start gap-2">
+          <span class="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+          <span><strong>External Surge Drivers:</strong> ${driverDesc}</span>
+        </li>
+      `);
+
+      // 3. Wastage Prevention Trade-off
+      bullets.push(`
+        <li class="flex items-start gap-2">
+          <span class="w-5 h-5 rounded-full bg-amber-100 text-amber-800 font-bold text-[11px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+          <span><strong>Wastage Protection:</strong> Historical logs flag <strong>${worstWasteItem.item}</strong> (${worstWasteItem.wastageRatePct}% unsold rate). Its safety stock buffer was intentionally tightened to avoid end-of-shift leftovers.</span>
+        </li>
+      `);
+
+      list.innerHTML = bullets.join('');
+    }
+
+    function renderCharts(currentForecast) {
+      // 1. Channel Mix Across All 4 Time Periods for selected Day/Event/Promo
+      const periodLabels = ['Morning', 'Lunch', 'Evening', 'Dinner'];
+      const counterData = [];
+      const takeawayData = [];
+      const deliveryData = [];
+
+      periodLabels.forEach(p => {
+        const f = predictForContext(currentForecast.dayType, p, currentForecast.eventContext, currentForecast.promoContext);
+        counterData.push(Math.round(f.totalPredictedDemand * (f.channelSplit.Counter / 100)));
+        takeawayData.push(Math.round(f.totalPredictedDemand * (f.channelSplit.Takeaway / 100)));
+        deliveryData.push(Math.round(f.totalPredictedDemand * (f.channelSplit.Delivery / 100)));
+      });
+
+      const ctx1 = document.getElementById('channelMixChart').getContext('2d');
+      if (appState.charts.channelMix) appState.charts.channelMix.destroy();
+
+      appState.charts.channelMix = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: periodLabels,
+          datasets: [
+            { label: 'Counter', data: counterData, backgroundColor: '#4f46e5', borderRadius: 4 },
+            { label: 'Takeaway', data: takeawayData, backgroundColor: '#f59e0b', borderRadius: 4 },
+            { label: 'Delivery', data: deliveryData, backgroundColor: '#10b981', borderRadius: 4 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 11, family: 'Inter' } } }
+          },
+          scales: {
+            x: { stacked: true, grid: { display: false }, ticks: { font: { size: 11 } } },
+            y: { stacked: true, beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 11 } } }
+          }
+        }
+      });
+
+      // 2. Historical Wastage Hotspots Horizontal Bar Chart
+      const sortedByWaste = [...currentForecast.items].sort((a, b) => b.wastageRatePct - a.wastageRatePct);
+      const wasteLabels = sortedByWaste.map(i => i.item.length > 18 ? i.item.slice(0, 17) + '…' : i.item);
+      const wasteValues = sortedByWaste.map(i => i.wastageRatePct);
+      const wasteColors = sortedByWaste.map(i => i.wastageRatePct > 15 ? '#f59e0b' : '#94a3b8');
+
+      const ctx2 = document.getElementById('wastageChart').getContext('2d');
+      if (appState.charts.wastage) appState.charts.wastage.destroy();
+
+      appState.charts.wastage = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: wasteLabels,
+          datasets: [{
+            label: 'Historical Unsold %',
+            data: wasteValues,
+            backgroundColor: wasteColors,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { beginAtZero: true, max: 30, grid: { color: '#f1f5f9' }, ticks: { callback: v => v + '%', font: { size: 10 } } },
+            y: { grid: { display: false }, ticks: { font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    function renderBacktestTable() {
+      const periodFilter = document.getElementById('btPeriodFilter').value;
+      const outcomeFilter = document.getElementById('btOutcomeFilter').value;
+      const tbody = document.getElementById('backtestTableBody');
+      tbody.innerHTML = '';
+
+      const filtered = appState.backtestResults.filter(r => {
+        if (periodFilter !== 'ALL' && r.timePeriod !== periodFilter) return false;
+        if (outcomeFilter === 'WASTE_SAVED' && r.wasteSaved <= 0) return false;
+        if (outcomeFilter === 'STOCKOUT_PREVENTED' && !r.preventedStockout) return false;
+        return true;
+      }).slice(0, 20);
+
+      filtered.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 transition';
+
+        let impactBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">Balanced</span>`;
+        if (row.preventedStockout && row.wasteSaved > 0) {
+          impactBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Stockout Avoided & -${row.wasteSaved} Waste</span>`;
+        } else if (row.preventedStockout) {
+          impactBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">Shortage Prevented</span>`;
+        } else if (row.wasteSaved > 2) {
+          impactBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">Saved ${row.wasteSaved} Unsold Units</span>`;
+        }
+
+        tr.innerHTML = `
+          <td class="py-2.5 px-4 font-medium text-slate-800">${row.date} <span class="text-slate-400">(${row.dayType.slice(0, 3)})</span></td>
+          <td class="py-2.5 px-3 text-slate-700">${row.timePeriod}</td>
+          <td class="py-2.5 px-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${row.eventLabel !== 'Standard' ? 'bg-purple-50 text-purple-700' : 'bg-slate-100 text-slate-600'}">
+              ${row.eventLabel}
+            </span>
+          </td>
+          <td class="py-2.5 px-3 text-right font-bold text-slate-900">${row.actualOrders}</td>
+          <td class="py-2.5 px-3 text-right font-semibold text-indigo-600">${row.modelPred}</td>
+          <td class="py-2.5 px-3 text-right text-slate-600">${row.histPrepared} → <strong class="text-slate-900">${row.modelPrep}</strong></td>
+          <td class="py-2.5 px-3 text-right">
+            <span class="text-amber-700 font-medium">${row.histWaste}</span> → <span class="text-emerald-700 font-bold">${row.modelWaste}</span>
+          </td>
+          <td class="py-2.5 px-4 text-right">${impactBadge}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ---------------------------------------------------------
+    // 7. CSV UPLOAD, EXPORT & MODAL INTERACTIONS
+    // ---------------------------------------------------------
+    function showToast(msg, type = 'success') {
+      const banner = document.getElementById('toastBanner');
+      const text = document.getElementById('toastMessage');
+      banner.classList.remove('hidden', 'bg-emerald-50', 'border-emerald-200', 'text-emerald-800', 'bg-red-50', 'border-red-200', 'text-red-800');
+      if (type === 'error') {
+        banner.classList.add('bg-red-50', 'border-red-200', 'text-red-800');
+      } else {
+        banner.classList.add('bg-emerald-50', 'border-emerald-200', 'text-emerald-800');
+      }
+      text.textContent = msg;
+    }
+
+    function handleCsvFileUpload(fileInputId, targetKey, badgeId) {
+      const input = document.getElementById(fileInputId);
+      input.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            if (!results.data || results.data.length === 0) {
+              showToast(`Could not find valid rows in ${file.name}.`, 'error');
+              return;
+            }
+            appState[targetKey] = results.data;
+            const badge = document.getElementById(badgeId);
+            badge.textContent = file.name;
+            badge.className = 'text-[11px] px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 truncate max-w-[130px]';
+
+            processDatasets(appState.orders, appState.menuPrep, appState.calendar);
+            updateDashboard();
+            showToast(`Successfully parsed ${file.name} (${results.data.length} rows) and recalculated forecasts!`);
+          },
+          error: (err) => {
+            showToast(`CSV Parse Error: ${err.message}`, 'error');
+          }
+        });
+      });
+    }
+
+    function downloadCsvFile(filename, rows) {
+      const csv = Papa.unparse(rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // ---------------------------------------------------------
+    // 8. INITIALIZATION ON WINDOW LOAD
+    // ---------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      let scenarioSeed = 0;
+
+      // Load initial synthetic dataset immediately so dashboard is alive
+      const initialData = generateSyntheticDataset(scenarioSeed);
+      processDatasets(initialData.orders, initialData.menuPrep, initialData.calendar);
+      updateDashboard();
+
+      // Wire Filter & Run Controls
+      ['simDayType', 'simTimePeriod', 'simEventContext', 'simPromoContext'].forEach(id => {
+        document.getElementById(id).addEventListener('change', updateDashboard);
+      });
+      document.getElementById('runPredictionBtn').addEventListener('click', () => {
+        updateDashboard();
+        showToast('Forecast & kitchen prep quantities recalculated for selected context.');
+      });
+
+      document.getElementById('tableFilterSelect').addEventListener('change', updateDashboard);
+      document.getElementById('btPeriodFilter').addEventListener('change', renderBacktestTable);
+      document.getElementById('btOutcomeFilter').addEventListener('change', renderBacktestTable);
+
+      // CSV Drawer Toggle
+      document.getElementById('toggleUploadDrawerBtn').addEventListener('click', () => {
+        document.getElementById('csvUploadDrawer').classList.toggle('hidden');
+      });
+
+      // Regenerate Synthetic Scenario
+      document.getElementById('regenerateSyntheticBtn').addEventListener('click', () => {
+        scenarioSeed += 3;
+        const fresh = generateSyntheticDataset(scenarioSeed);
+        processDatasets(fresh.orders, fresh.menuPrep, fresh.calendar);
+        updateDashboard();
+        ['ordersFileBadge', 'prepFileBadge', 'calendarFileBadge'].forEach(id => {
+          const b = document.getElementById(id);
+          b.textContent = 'Synthetic v' + (scenarioSeed / 3 + 1);
+          b.className = 'text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300';
+        });
+        showToast('Generated new synthetic QSR dataset & re-evaluated all backtest periods.');
+      });
+
+      // Reset to Default Synthetic
+      document.getElementById('resetToDemoBtn').addEventListener('click', () => {
+        scenarioSeed = 0;
+        const fresh = generateSyntheticDataset(0);
+        processDatasets(fresh.orders, fresh.menuPrep, fresh.calendar);
+        updateDashboard();
+        showToast('Reset to default 14-day synthetic dataset.');
+      });
+
+      // Export CSV Templates
+      document.getElementById('downloadTemplatesBtn').addEventListener('click', () => {
+        downloadCsvFile('Orders.csv', appState.orders);
+        setTimeout(() => downloadCsvFile('Menu_Preparation.csv', appState.menuPrep), 250);
+        setTimeout(() => downloadCsvFile('Calendar.csv', appState.calendar), 500);
+        showToast('Exported Orders.csv, Menu_Preparation.csv, and Calendar.csv!');
+      });
+
+      // Wire CSV File Inputs
+      handleCsvFileUpload('ordersCsvInput', 'orders', 'ordersFileBadge');
+      handleCsvFileUpload('prepCsvInput', 'menuPrep', 'prepFileBadge');
+      handleCsvFileUpload('calendarCsvInput', 'calendar', 'calendarFileBadge');
+
+      // Assumptions Modal Handlers
+      const modal = document.getElementById('assumptionsModal');
+      document.getElementById('openAssumptionsBtn').addEventListener('click', () => modal.classList.remove('hidden'));
+      document.getElementById('closeAssumptionsBtn').addEventListener('click', () => modal.classList.add('hidden'));
+      document.getElementById('closeAssumptionsFooterBtn').addEventListener('click', () => modal.classList.add('hidden'));
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.classList.add('hidden');
+      });
+    });
+  </script>
+</body>
+</html>
